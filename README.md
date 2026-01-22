@@ -134,8 +134,8 @@ medical-imaging-explorer/
 Biomedical Engineering Graduate | Işık University, Istanbul
 
 - 📧 Email: [mohammadkhalaf.bme@gmail.com](mailto:mohammadkhalaf.bme@gmail.com)
-- 💼 LinkedIn: [linkedin.com/in/mohammadkhalaf](https://linkedin.com/in/mohammadkhalaf)
-- 🐦 X/Twitter: [@TechPulseG](https://twitter.com/TechPulseG)
+- 💼 LinkedIn: https://www.linkedin.com/in/mohammad-khalaf-b80273261/
+
 
 ## 🤝 Contributing
 
