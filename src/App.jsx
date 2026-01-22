@@ -1,3 +1,4 @@
+
 import { useState, useEffect, useRef } from 'react';
 import * as THREE from 'three';
 
@@ -160,7 +161,7 @@ export default function App() {
     mountRef.current.appendChild(renderer.domElement);
     rendererRef.current = renderer;
 
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
     scene.add(ambientLight);
     const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
     directionalLight.position.set(5, 5, 5);
@@ -190,6 +191,21 @@ export default function App() {
     renderer.domElement.addEventListener('mouseup', onMouseUp);
     renderer.domElement.addEventListener('mousemove', onMouseMove);
     renderer.domElement.addEventListener('mouseleave', onMouseUp);
+
+    // Touch events for mobile
+    const onTouchStart = (e) => { isDragging = true; prevX = e.touches[0].clientX; };
+    const onTouchEnd = () => { isDragging = false; };
+    const onTouchMove = (e) => {
+      if (isDragging && machineGroupRef.current) {
+        const delta = e.touches[0].clientX - prevX;
+        machineGroupRef.current.rotation.y += delta * 0.01;
+        prevX = e.touches[0].clientX;
+      }
+    };
+
+    renderer.domElement.addEventListener('touchstart', onTouchStart);
+    renderer.domElement.addEventListener('touchend', onTouchEnd);
+    renderer.domElement.addEventListener('touchmove', onTouchMove);
 
     let rotationAngle = 0;
     const animate = () => {
@@ -229,6 +245,9 @@ export default function App() {
       renderer.domElement.removeEventListener('mouseup', onMouseUp);
       renderer.domElement.removeEventListener('mousemove', onMouseMove);
       renderer.domElement.removeEventListener('mouseleave', onMouseUp);
+      renderer.domElement.removeEventListener('touchstart', onTouchStart);
+      renderer.domElement.removeEventListener('touchend', onTouchEnd);
+      renderer.domElement.removeEventListener('touchmove', onTouchMove);
       if (mountRef.current && renderer.domElement) {
         mountRef.current.removeChild(renderer.domElement);
       }
@@ -246,74 +265,136 @@ export default function App() {
     const group = machineGroupRef.current;
 
     if (selectedMachine === 'mri') {
-      const outerGeo = new THREE.CylinderGeometry(2, 2, 3, 32, 1, true);
-      const outerMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, side: THREE.DoubleSide });
-      const outer = new THREE.Mesh(outerGeo, outerMat);
-      outer.rotation.z = Math.PI / 2;
-      group.add(outer);
+      // Main Magnet - outer shell (large visible blue cylinder)
+      const mainMagnetGeo = new THREE.CylinderGeometry(2.2, 2.2, 2.8, 32);
+      const mainMagnetMat = new THREE.MeshStandardMaterial({ 
+        color: activeComponent === 0 ? 0x60a5fa : 0x1e40af, 
+        emissive: activeComponent === 0 ? 0x3b82f6 : 0x1e3a8a,
+        emissiveIntensity: activeComponent === 0 ? 0.4 : 0.1
+      });
+      const mainMagnet = new THREE.Mesh(mainMagnetGeo, mainMagnetMat);
+      mainMagnet.rotation.z = Math.PI / 2;
+      group.add(mainMagnet);
 
-      const boreGeo = new THREE.CylinderGeometry(1.2, 1.2, 3.2, 32, 1, true);
-      const boreMat = new THREE.MeshStandardMaterial({ color: 0x334155, side: THREE.DoubleSide });
+      // Bore hole (dark center)
+      const boreGeo = new THREE.CylinderGeometry(1.0, 1.0, 3, 32);
+      const boreMat = new THREE.MeshStandardMaterial({ color: 0x0f172a });
       const bore = new THREE.Mesh(boreGeo, boreMat);
       bore.rotation.z = Math.PI / 2;
       group.add(bore);
 
-      for (let i = -1; i <= 1; i++) {
-        const ringGeo = new THREE.TorusGeometry(1.5, 0.08, 16, 100);
-        const ringMat = new THREE.MeshStandardMaterial({ color: activeComponent === 1 ? 0x8b5cf6 : 0x4c1d95 });
-        const ring = new THREE.Mesh(ringGeo, ringMat);
-        ring.position.x = i * 0.8;
-        ring.rotation.y = Math.PI / 2;
-        group.add(ring);
+      // Gradient Coils - visible purple rings inside the bore
+      for (let i = -2; i <= 2; i++) {
+        const gradientGeo = new THREE.TorusGeometry(1.25, 0.12, 16, 100);
+        const gradientMat = new THREE.MeshStandardMaterial({ 
+          color: activeComponent === 1 ? 0xc084fc : 0x7c3aed,
+          emissive: activeComponent === 1 ? 0xa855f7 : 0x6d28d9,
+          emissiveIntensity: activeComponent === 1 ? 0.5 : 0.2
+        });
+        const gradientCoil = new THREE.Mesh(gradientGeo, gradientMat);
+        gradientCoil.position.x = i * 0.5;
+        gradientCoil.rotation.y = Math.PI / 2;
+        group.add(gradientCoil);
       }
 
-      const rfGeo = new THREE.TorusGeometry(0.9, 0.05, 16, 100);
-      const rfMat = new THREE.MeshStandardMaterial({ color: activeComponent === 2 ? 0xf59e0b : 0x92400e, emissive: 0xf59e0b, emissiveIntensity: 0.2 });
+      // RF Coil - bright orange ring closest to patient (innermost)
+      const rfGeo = new THREE.TorusGeometry(1.0, 0.1, 16, 100);
+      const rfMat = new THREE.MeshStandardMaterial({ 
+        color: activeComponent === 2 ? 0xfcd34d : 0xf59e0b, 
+        emissive: 0xf59e0b, 
+        emissiveIntensity: activeComponent === 2 ? 0.7 : 0.4 
+      });
       const rf = new THREE.Mesh(rfGeo, rfMat);
       rf.rotation.y = Math.PI / 2;
       rf.userData.pulse = true;
       group.add(rf);
 
-      const tableGeo = new THREE.BoxGeometry(4, 0.15, 0.8);
-      const tableMat = new THREE.MeshStandardMaterial({ color: activeComponent === 3 ? 0x9ca3af : 0x4b5563 });
-      const table = new THREE.Mesh(tableGeo, tableMat);
-      table.position.y = -0.8;
-      group.add(table);
-
-      const capGeo = new THREE.RingGeometry(1.2, 2, 32);
-      const capMat = new THREE.MeshStandardMaterial({ color: 0x10b981, side: THREE.DoubleSide });
+      // End caps
+      const capGeo = new THREE.RingGeometry(1.0, 2.2, 32);
+      const capMat = new THREE.MeshStandardMaterial({ 
+        color: activeComponent === 0 ? 0x60a5fa : 0x1e40af, 
+        side: THREE.DoubleSide 
+      });
       const cap1 = new THREE.Mesh(capGeo, capMat);
-      cap1.position.x = 1.5;
+      cap1.position.x = 1.4;
       cap1.rotation.y = Math.PI / 2;
       group.add(cap1);
       const cap2 = cap1.clone();
-      cap2.position.x = -1.5;
+      cap2.position.x = -1.4;
       group.add(cap2);
 
+      // Patient table
+      const tableGeo = new THREE.BoxGeometry(4, 0.15, 0.7);
+      const tableMat = new THREE.MeshStandardMaterial({ 
+        color: activeComponent === 3 ? 0xd1d5db : 0x4b5563,
+        emissive: activeComponent === 3 ? 0x6b7280 : 0x000000,
+        emissiveIntensity: activeComponent === 3 ? 0.2 : 0
+      });
+      const table = new THREE.Mesh(tableGeo, tableMat);
+      table.position.y = -0.65;
+      group.add(table);
+
+      // Patient silhouette
+      const patientGeo = new THREE.CylinderGeometry(0.22, 0.22, 1.8, 16);
+      const patientMat = new THREE.MeshStandardMaterial({ color: 0x64748b });
+      const patient = new THREE.Mesh(patientGeo, patientMat);
+      patient.rotation.z = Math.PI / 2;
+      patient.position.y = -0.4;
+      group.add(patient);
+
     } else if (selectedMachine === 'ct') {
-      const gantryGeo = new THREE.TorusGeometry(2, 0.5, 16, 100);
-      const gantryMat = new THREE.MeshStandardMaterial({ color: activeComponent === 2 ? 0x4b5563 : 0x1e293b });
+      // CT Gantry - outer ring
+      const gantryGeo = new THREE.TorusGeometry(2.2, 0.5, 16, 100);
+      const gantryMat = new THREE.MeshStandardMaterial({ 
+        color: activeComponent === 2 ? 0x9ca3af : 0x374151,
+        emissive: activeComponent === 2 ? 0x4b5563 : 0x000000,
+        emissiveIntensity: activeComponent === 2 ? 0.3 : 0
+      });
       const gantry = new THREE.Mesh(gantryGeo, gantryMat);
       gantry.rotation.x = Math.PI / 2;
       group.add(gantry);
 
+      // Inner bore
+      const innerGeo = new THREE.TorusGeometry(1.5, 0.2, 16, 100);
+      const innerMat = new THREE.MeshStandardMaterial({ color: 0x1f2937 });
+      const inner = new THREE.Mesh(innerGeo, innerMat);
+      inner.rotation.x = Math.PI / 2;
+      group.add(inner);
+
+      // Rotating assembly
       const rotatingGroup = new THREE.Group();
       rotatingGroup.userData.rotate = true;
 
-      const tubeGeo = new THREE.BoxGeometry(0.4, 0.3, 0.3);
-      const tubeMat = new THREE.MeshStandardMaterial({ color: activeComponent === 0 ? 0xef4444 : 0x991b1b, emissive: 0xef4444, emissiveIntensity: 0.3 });
+      // X-ray tube - bright red box
+      const tubeGeo = new THREE.BoxGeometry(0.5, 0.4, 0.35);
+      const tubeMat = new THREE.MeshStandardMaterial({ 
+        color: activeComponent === 0 ? 0xf87171 : 0xdc2626, 
+        emissive: 0xef4444, 
+        emissiveIntensity: activeComponent === 0 ? 0.5 : 0.3 
+      });
       const tube = new THREE.Mesh(tubeGeo, tubeMat);
-      tube.position.set(0, 1.8, 0);
+      tube.position.set(0, 1.85, 0);
       rotatingGroup.add(tube);
 
-      const detGeo = new THREE.BoxGeometry(0.6, 0.2, 0.4);
-      const detMat = new THREE.MeshStandardMaterial({ color: activeComponent === 1 ? 0x10b981 : 0x065f46 });
+      // Detector array - green curved panel
+      const detGeo = new THREE.BoxGeometry(0.8, 0.15, 0.5);
+      const detMat = new THREE.MeshStandardMaterial({ 
+        color: activeComponent === 1 ? 0x4ade80 : 0x16a34a,
+        emissive: activeComponent === 1 ? 0x22c55e : 0x15803d,
+        emissiveIntensity: activeComponent === 1 ? 0.4 : 0.2
+      });
       const det = new THREE.Mesh(detGeo, detMat);
-      det.position.set(0, -1.8, 0);
+      det.position.set(0, -1.85, 0);
       rotatingGroup.add(det);
 
-      const beamGeo = new THREE.ConeGeometry(0.8, 3.2, 32, 1, true);
-      const beamMat = new THREE.MeshStandardMaterial({ color: 0xef4444, transparent: true, opacity: 0.2, side: THREE.DoubleSide });
+      // X-ray beam cone
+      const beamGeo = new THREE.ConeGeometry(0.9, 3.4, 32, 1, true);
+      const beamMat = new THREE.MeshStandardMaterial({ 
+        color: 0xef4444, 
+        transparent: true, 
+        opacity: 0.25, 
+        side: THREE.DoubleSide 
+      });
       const beam = new THREE.Mesh(beamGeo, beamMat);
       beam.position.y = 0;
       beam.rotation.x = Math.PI;
@@ -322,156 +403,337 @@ export default function App() {
 
       group.add(rotatingGroup);
 
+      // Patient table
       const tableGeo = new THREE.BoxGeometry(4, 0.12, 0.7);
-      const tableMat = new THREE.MeshStandardMaterial({ color: activeComponent === 3 ? 0x9ca3af : 0x4b5563 });
+      const tableMat = new THREE.MeshStandardMaterial({ 
+        color: activeComponent === 3 ? 0xd1d5db : 0x4b5563,
+        emissive: activeComponent === 3 ? 0x6b7280 : 0x000000,
+        emissiveIntensity: activeComponent === 3 ? 0.2 : 0
+      });
       const table = new THREE.Mesh(tableGeo, tableMat);
       table.position.y = -0.7;
       group.add(table);
 
-      const housingGeo = new THREE.TorusGeometry(2.3, 0.3, 16, 100);
-      const housingMat = new THREE.MeshStandardMaterial({ color: 0x3b82f6 });
+      // Outer housing ring
+      const housingGeo = new THREE.TorusGeometry(2.5, 0.15, 16, 100);
+      const housingMat = new THREE.MeshStandardMaterial({ color: 0x3b82f6, emissive: 0x1d4ed8, emissiveIntensity: 0.2 });
       const housing = new THREE.Mesh(housingGeo, housingMat);
       housing.rotation.x = Math.PI / 2;
       group.add(housing);
 
+      // Patient silhouette
+      const patientGeo = new THREE.CylinderGeometry(0.25, 0.25, 1.5, 16);
+      const patientMat = new THREE.MeshStandardMaterial({ color: 0x64748b });
+      const patient = new THREE.Mesh(patientGeo, patientMat);
+      patient.rotation.z = Math.PI / 2;
+      patient.position.y = -0.5;
+      group.add(patient);
+
     } else if (selectedMachine === 'xray') {
-      const tubeHouseGeo = new THREE.BoxGeometry(0.8, 0.6, 0.6);
-      const tubeHouseMat = new THREE.MeshStandardMaterial({ color: activeComponent === 0 ? 0xef4444 : 0x7f1d1d });
+      // X-ray tube housing - red box at top
+      const tubeHouseGeo = new THREE.BoxGeometry(0.9, 0.7, 0.7);
+      const tubeHouseMat = new THREE.MeshStandardMaterial({ 
+        color: activeComponent === 0 ? 0xf87171 : 0xb91c1c,
+        emissive: activeComponent === 0 ? 0xef4444 : 0x7f1d1d,
+        emissiveIntensity: activeComponent === 0 ? 0.4 : 0.15
+      });
       const tubeHouse = new THREE.Mesh(tubeHouseGeo, tubeHouseMat);
       tubeHouse.position.y = 2.5;
       group.add(tubeHouse);
 
-      const collGeo = new THREE.CylinderGeometry(0.3, 0.15, 0.4, 32);
-      const collMat = new THREE.MeshStandardMaterial({ color: activeComponent === 1 ? 0xf59e0b : 0x92400e });
+      // Collimator - orange cone
+      const collGeo = new THREE.CylinderGeometry(0.35, 0.18, 0.5, 32);
+      const collMat = new THREE.MeshStandardMaterial({ 
+        color: activeComponent === 1 ? 0xfbbf24 : 0xd97706,
+        emissive: activeComponent === 1 ? 0xf59e0b : 0x92400e,
+        emissiveIntensity: activeComponent === 1 ? 0.4 : 0.2
+      });
       const coll = new THREE.Mesh(collGeo, collMat);
-      coll.position.y = 2;
+      coll.position.y = 1.9;
       group.add(coll);
 
-      const beamGeo = new THREE.ConeGeometry(1.5, 3.5, 32, 1, true);
-      const beamMat = new THREE.MeshStandardMaterial({ color: 0xef4444, transparent: true, opacity: 0.15, side: THREE.DoubleSide });
+      // X-ray beam
+      const beamGeo = new THREE.ConeGeometry(1.6, 3.8, 32, 1, true);
+      const beamMat = new THREE.MeshStandardMaterial({ 
+        color: 0xef4444, 
+        transparent: true, 
+        opacity: 0.18, 
+        side: THREE.DoubleSide 
+      });
       const beam = new THREE.Mesh(beamGeo, beamMat);
-      beam.position.y = 0;
+      beam.position.y = -0.2;
       beam.rotation.x = Math.PI;
       beam.userData.beam = true;
       group.add(beam);
 
-      const tableGeo = new THREE.BoxGeometry(2.5, 0.12, 1.2);
-      const tableMat = new THREE.MeshStandardMaterial({ color: activeComponent === 3 ? 0x9ca3af : 0x4b5563 });
+      // Patient table
+      const tableGeo = new THREE.BoxGeometry(2.8, 0.12, 1.3);
+      const tableMat = new THREE.MeshStandardMaterial({ 
+        color: activeComponent === 3 ? 0xd1d5db : 0x4b5563,
+        emissive: activeComponent === 3 ? 0x6b7280 : 0x000000,
+        emissiveIntensity: activeComponent === 3 ? 0.2 : 0
+      });
       const table = new THREE.Mesh(tableGeo, tableMat);
       table.position.y = -0.5;
       group.add(table);
 
-      const detGeo = new THREE.BoxGeometry(2.2, 0.1, 1.8);
-      const detMat = new THREE.MeshStandardMaterial({ color: activeComponent === 2 ? 0x10b981 : 0x065f46 });
+      // Patient silhouette
+      const patientGeo = new THREE.BoxGeometry(1.5, 0.25, 0.8);
+      const patientMat = new THREE.MeshStandardMaterial({ color: 0x64748b });
+      const patient = new THREE.Mesh(patientGeo, patientMat);
+      patient.position.y = -0.3;
+      group.add(patient);
+
+      // Detector panel - green at bottom
+      const detGeo = new THREE.BoxGeometry(2.4, 0.12, 2);
+      const detMat = new THREE.MeshStandardMaterial({ 
+        color: activeComponent === 2 ? 0x4ade80 : 0x16a34a,
+        emissive: activeComponent === 2 ? 0x22c55e : 0x166534,
+        emissiveIntensity: activeComponent === 2 ? 0.4 : 0.2
+      });
       const det = new THREE.Mesh(detGeo, detMat);
-      det.position.y = -1.8;
+      det.position.y = -2;
       group.add(det);
 
-      const armGeo = new THREE.CylinderGeometry(0.08, 0.08, 3, 16);
+      // Support arm
+      const armGeo = new THREE.CylinderGeometry(0.1, 0.1, 3.5, 16);
       const armMat = new THREE.MeshStandardMaterial({ color: 0x6b7280 });
       const arm = new THREE.Mesh(armGeo, armMat);
-      arm.position.set(0.8, 1, 0);
+      arm.position.set(1, 0.8, 0);
       group.add(arm);
 
     } else if (selectedMachine === 'ultrasound') {
-      const bodyGeo = new THREE.BoxGeometry(1.2, 2, 0.8);
+      // Machine cart body
+      const bodyGeo = new THREE.BoxGeometry(1.4, 2.2, 0.9);
       const bodyMat = new THREE.MeshStandardMaterial({ color: 0x334155 });
       const body = new THREE.Mesh(bodyGeo, bodyMat);
-      body.position.set(-1.5, 0, 0);
+      body.position.set(-1.8, -0.2, 0);
       group.add(body);
 
-      const monGeo = new THREE.BoxGeometry(1, 0.8, 0.1);
-      const monMat = new THREE.MeshStandardMaterial({ color: activeComponent === 3 ? 0x1e293b : 0x0f172a, emissive: 0x8b5cf6, emissiveIntensity: 0.1 });
+      // Display Monitor
+      const monGeo = new THREE.BoxGeometry(1.2, 0.9, 0.12);
+      const monMat = new THREE.MeshStandardMaterial({ 
+        color: activeComponent === 3 ? 0x334155 : 0x1e293b, 
+        emissive: 0x8b5cf6, 
+        emissiveIntensity: activeComponent === 3 ? 0.3 : 0.15 
+      });
       const mon = new THREE.Mesh(monGeo, monMat);
-      mon.position.set(-1.5, 1.2, 0.4);
+      mon.position.set(-1.8, 1.1, 0.45);
       mon.rotation.x = -0.2;
       group.add(mon);
 
-      const transGeo = new THREE.CylinderGeometry(0.15, 0.2, 0.8, 32);
-      const transMat = new THREE.MeshStandardMaterial({ color: activeComponent === 0 ? 0x8b5cf6 : 0x5b21b6 });
+      // Screen display (bright part)
+      const screenGeo = new THREE.BoxGeometry(1.0, 0.7, 0.02);
+      const screenMat = new THREE.MeshStandardMaterial({ 
+        color: 0x0f172a, 
+        emissive: activeComponent === 3 ? 0x8b5cf6 : 0x4c1d95, 
+        emissiveIntensity: 0.4 
+      });
+      const screen = new THREE.Mesh(screenGeo, screenMat);
+      screen.position.set(-1.8, 1.12, 0.52);
+      screen.rotation.x = -0.2;
+      group.add(screen);
+
+      // Transducer handle - purple
+      const transGeo = new THREE.CylinderGeometry(0.18, 0.22, 1, 32);
+      const transMat = new THREE.MeshStandardMaterial({ 
+        color: activeComponent === 0 ? 0xa78bfa : 0x7c3aed,
+        emissive: activeComponent === 0 ? 0x8b5cf6 : 0x5b21b6,
+        emissiveIntensity: activeComponent === 0 ? 0.4 : 0.2
+      });
       const trans = new THREE.Mesh(transGeo, transMat);
-      trans.position.set(1, 0.5, 0);
-      trans.rotation.x = Math.PI / 4;
+      trans.position.set(1.2, 0.3, 0);
+      trans.rotation.x = Math.PI / 5;
       group.add(trans);
 
-      const piezoGeo = new THREE.CylinderGeometry(0.18, 0.18, 0.05, 32);
-      const piezoMat = new THREE.MeshStandardMaterial({ color: activeComponent === 1 ? 0x06b6d4 : 0x0e7490, emissive: 0x06b6d4, emissiveIntensity: 0.3 });
+      // Piezoelectric Crystals - bright cyan array at transducer tip
+      const piezoGeo = new THREE.CylinderGeometry(0.22, 0.22, 0.15, 32);
+      const piezoMat = new THREE.MeshStandardMaterial({ 
+        color: activeComponent === 1 ? 0x22d3ee : 0x0891b2, 
+        emissive: 0x06b6d4, 
+        emissiveIntensity: activeComponent === 1 ? 0.6 : 0.3 
+      });
       const piezo = new THREE.Mesh(piezoGeo, piezoMat);
-      piezo.position.set(1.28, 0.22, 0.28);
-      piezo.rotation.x = Math.PI / 4;
+      piezo.position.set(1.35, -0.15, 0.18);
+      piezo.rotation.x = Math.PI / 5;
       piezo.userData.pulse = true;
       group.add(piezo);
 
+      // Crystal elements (visible lines on piezo)
+      for (let i = -2; i <= 2; i++) {
+        const elementGeo = new THREE.BoxGeometry(0.02, 0.16, 0.35);
+        const elementMat = new THREE.MeshStandardMaterial({ 
+          color: activeComponent === 1 ? 0x67e8f9 : 0x22d3ee,
+          emissive: 0x06b6d4,
+          emissiveIntensity: 0.5
+        });
+        const element = new THREE.Mesh(elementGeo, elementMat);
+        element.position.set(1.35 + i * 0.06, -0.15, 0.18);
+        element.rotation.x = Math.PI / 5;
+        group.add(element);
+      }
+
+      // Cable
       const curvePoints = [
-        new THREE.Vector3(-0.9, -0.3, 0),
-        new THREE.Vector3(0, 0.2, 0.3),
-        new THREE.Vector3(0.85, 0.7, 0.15)
+        new THREE.Vector3(-1.1, -0.5, 0),
+        new THREE.Vector3(0, 0, 0.3),
+        new THREE.Vector3(1.05, 0.55, 0.1)
       ];
       const curve = new THREE.CatmullRomCurve3(curvePoints);
-      const cableGeo = new THREE.TubeGeometry(curve, 20, 0.04, 8, false);
+      const cableGeo = new THREE.TubeGeometry(curve, 20, 0.05, 8, false);
       const cableMat = new THREE.MeshStandardMaterial({ color: 0x4b5563 });
       const cable = new THREE.Mesh(cableGeo, cableMat);
       group.add(cable);
 
-      const patientGeo = new THREE.SphereGeometry(0.8, 32, 16);
+      // Patient body area
+      const patientGeo = new THREE.SphereGeometry(0.9, 32, 16);
       const patientMat = new THREE.MeshStandardMaterial({ color: 0x64748b });
       const patient = new THREE.Mesh(patientGeo, patientMat);
-      patient.position.set(1.3, -0.5, 0);
+      patient.position.set(1.4, -1, 0);
       patient.scale.set(1, 0.5, 0.8);
       group.add(patient);
 
-      const gelGeo = new THREE.SphereGeometry(0.25, 32, 16);
-      const gelMat = new THREE.MeshStandardMaterial({ color: activeComponent === 2 ? 0x10b981 : 0x065f46, transparent: true, opacity: 0.7 });
+      // Acoustic Gel - bright green blob
+      const gelGeo = new THREE.SphereGeometry(0.3, 32, 16);
+      const gelMat = new THREE.MeshStandardMaterial({ 
+        color: activeComponent === 2 ? 0x4ade80 : 0x22c55e, 
+        transparent: true, 
+        opacity: 0.75,
+        emissive: activeComponent === 2 ? 0x22c55e : 0x15803d,
+        emissiveIntensity: activeComponent === 2 ? 0.3 : 0.1
+      });
       const gel = new THREE.Mesh(gelGeo, gelMat);
-      gel.position.set(1.28, 0, 0.2);
-      gel.scale.set(1, 0.3, 1);
+      gel.position.set(1.38, -0.5, 0.15);
+      gel.scale.set(1, 0.4, 1);
       group.add(gel);
 
+      // Sound waves emanating (visual)
+      if (isAnimating) {
+        for (let i = 1; i <= 3; i++) {
+          const waveGeo = new THREE.TorusGeometry(0.15 * i, 0.02, 8, 32);
+          const waveMat = new THREE.MeshStandardMaterial({ 
+            color: 0x8b5cf6, 
+            transparent: true, 
+            opacity: 0.4 - i * 0.1 
+          });
+          const wave = new THREE.Mesh(waveGeo, waveMat);
+          wave.position.set(1.4, -0.7 - i * 0.15, 0.15);
+          wave.rotation.x = Math.PI / 2;
+          group.add(wave);
+        }
+      }
+
     } else if (selectedMachine === 'pet') {
-      const ringGeo = new THREE.TorusGeometry(2, 0.4, 16, 100);
-      const ringMat = new THREE.MeshStandardMaterial({ color: activeComponent === 0 ? 0xf59e0b : 0x92400e });
+      // Outer housing ring - amber/orange
+      const housingGeo = new THREE.TorusGeometry(2.4, 0.25, 16, 100);
+      const housingMat = new THREE.MeshStandardMaterial({ 
+        color: 0xf59e0b, 
+        emissive: 0xd97706, 
+        emissiveIntensity: 0.2 
+      });
+      const housing = new THREE.Mesh(housingGeo, housingMat);
+      housing.rotation.x = Math.PI / 2;
+      group.add(housing);
+
+      // Detector Ring - main amber ring
+      const ringGeo = new THREE.TorusGeometry(2.1, 0.4, 16, 100);
+      const ringMat = new THREE.MeshStandardMaterial({ 
+        color: activeComponent === 0 ? 0xfbbf24 : 0xb45309,
+        emissive: activeComponent === 0 ? 0xf59e0b : 0x92400e,
+        emissiveIntensity: activeComponent === 0 ? 0.4 : 0.15
+      });
       const ring = new THREE.Mesh(ringGeo, ringMat);
       ring.rotation.x = Math.PI / 2;
       group.add(ring);
 
-      const crystalCount = 32;
+      // Scintillator Crystals - green boxes around ring
+      const crystalCount = 24;
       for (let i = 0; i < crystalCount; i++) {
         const angle = (i / crystalCount) * Math.PI * 2;
-        const crystalGeo = new THREE.BoxGeometry(0.15, 0.3, 0.15);
-        const crystalMat = new THREE.MeshStandardMaterial({ color: activeComponent === 1 ? 0x10b981 : 0x065f46, emissive: 0x10b981, emissiveIntensity: 0.2 });
+        const crystalGeo = new THREE.BoxGeometry(0.2, 0.4, 0.2);
+        const crystalMat = new THREE.MeshStandardMaterial({ 
+          color: activeComponent === 1 ? 0x4ade80 : 0x16a34a, 
+          emissive: activeComponent === 1 ? 0x22c55e : 0x15803d, 
+          emissiveIntensity: activeComponent === 1 ? 0.5 : 0.2 
+        });
         const crystal = new THREE.Mesh(crystalGeo, crystalMat);
-        crystal.position.set(Math.cos(angle) * 1.8, Math.sin(angle) * 1.8, 0);
+        crystal.position.set(Math.cos(angle) * 1.85, Math.sin(angle) * 1.85, 0);
         crystal.lookAt(0, 0, 0);
         group.add(crystal);
       }
 
-      const boreGeo = new THREE.CylinderGeometry(1.3, 1.3, 1, 32, 1, true);
+      // Photomultipliers - blue cylinders behind crystals
+      for (let i = 0; i < 12; i++) {
+        const angle = (i / 12) * Math.PI * 2;
+        const pmGeo = new THREE.CylinderGeometry(0.12, 0.12, 0.3, 16);
+        const pmMat = new THREE.MeshStandardMaterial({ 
+          color: activeComponent === 2 ? 0x60a5fa : 0x2563eb, 
+          emissive: activeComponent === 2 ? 0x3b82f6 : 0x1d4ed8, 
+          emissiveIntensity: activeComponent === 2 ? 0.5 : 0.2 
+        });
+        const pm = new THREE.Mesh(pmGeo, pmMat);
+        pm.position.set(Math.cos(angle) * 2.25, Math.sin(angle) * 2.25, 0);
+        pm.rotation.x = Math.PI / 2;
+        pm.lookAt(0, 0, 0);
+        group.add(pm);
+      }
+
+      // Inner bore
+      const boreGeo = new THREE.CylinderGeometry(1.4, 1.4, 1.2, 32, 1, true);
       const boreMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, side: THREE.DoubleSide });
       const bore = new THREE.Mesh(boreGeo, boreMat);
       bore.rotation.x = Math.PI / 2;
       group.add(bore);
 
-      const tracerGeo = new THREE.SphereGeometry(0.15, 16, 16);
-      const tracerMat = new THREE.MeshStandardMaterial({ color: activeComponent === 3 ? 0xef4444 : 0xf87171, emissive: 0xef4444, emissiveIntensity: 0.8 });
-      const tracer = new THREE.Mesh(tracerGeo, tracerMat);
-      tracer.position.set(0.2, 0.1, 0);
-      tracer.userData.pulse = true;
-      group.add(tracer);
+      // Patient silhouette
+      const patientGeo = new THREE.CylinderGeometry(0.3, 0.3, 2, 16);
+      const patientMat = new THREE.MeshStandardMaterial({ color: 0x64748b });
+      const patient = new THREE.Mesh(patientGeo, patientMat);
+      patient.rotation.z = Math.PI / 2;
+      patient.position.y = -0.3;
+      group.add(patient);
 
+      // Radiotracer hotspots - glowing red spheres inside patient
+      const tracer1Geo = new THREE.SphereGeometry(0.15, 16, 16);
+      const tracer1Mat = new THREE.MeshStandardMaterial({ 
+        color: activeComponent === 3 ? 0xfca5a5 : 0xf87171, 
+        emissive: 0xef4444, 
+        emissiveIntensity: activeComponent === 3 ? 0.9 : 0.6 
+      });
+      const tracer1 = new THREE.Mesh(tracer1Geo, tracer1Mat);
+      tracer1.position.set(0.2, 0, 0);
+      tracer1.userData.pulse = true;
+      group.add(tracer1);
+
+      const tracer2 = tracer1.clone();
+      tracer2.scale.set(0.7, 0.7, 0.7);
+      tracer2.position.set(-0.3, -0.15, 0.1);
+      tracer2.userData.pulse = true;
+      group.add(tracer2);
+
+      // Gamma ray lines (when active)
+      if (activeComponent === 3 || isAnimating) {
+        const rayMat = new THREE.LineBasicMaterial({ color: 0xfbbf24, transparent: true, opacity: 0.6 });
+        const rayPoints1 = [new THREE.Vector3(0.2, 0, 0), new THREE.Vector3(1.8, 0, 0)];
+        const rayGeo1 = new THREE.BufferGeometry().setFromPoints(rayPoints1);
+        const ray1 = new THREE.Line(rayGeo1, rayMat);
+        group.add(ray1);
+        
+        const rayPoints2 = [new THREE.Vector3(0.2, 0, 0), new THREE.Vector3(-1.8, 0, 0)];
+        const rayGeo2 = new THREE.BufferGeometry().setFromPoints(rayPoints2);
+        const ray2 = new THREE.Line(rayGeo2, rayMat);
+        group.add(ray2);
+      }
+
+      // Patient table
       const tableGeo = new THREE.BoxGeometry(4, 0.12, 0.7);
       const tableMat = new THREE.MeshStandardMaterial({ color: 0x4b5563 });
       const table = new THREE.Mesh(tableGeo, tableMat);
       table.position.y = -0.9;
       group.add(table);
-
-      const housingGeo = new THREE.TorusGeometry(2.3, 0.2, 16, 100);
-      const housingMat = new THREE.MeshStandardMaterial({ color: 0xf59e0b });
-      const housing = new THREE.Mesh(housingGeo, housingMat);
-      housing.rotation.x = Math.PI / 2;
-      group.add(housing);
     }
 
-  }, [selectedMachine, activeComponent]);
+  }, [selectedMachine, activeComponent, isAnimating]);
 
   const handleQuizAnswer = (index) => {
     if (quizState.answered) return;
