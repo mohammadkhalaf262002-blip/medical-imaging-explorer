@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useRef } from 'react';
 import * as THREE from 'three';
 
@@ -342,6 +341,38 @@ export default function App() {
       patient.position.y = -0.4;
       group.add(patient);
 
+      // MRI Magnetic Field Lines (horizontal through bore)
+      if (isAnimating) {
+        for (let i = -3; i <= 3; i++) {
+          const linePoints = [
+            new THREE.Vector3(-2, i * 0.15, 0),
+            new THREE.Vector3(2, i * 0.15, 0)
+          ];
+          const lineGeo = new THREE.BufferGeometry().setFromPoints(linePoints);
+          const lineMat = new THREE.LineBasicMaterial({ 
+            color: 0x3b82f6, 
+            transparent: true, 
+            opacity: 0.4 
+          });
+          const fieldLine = new THREE.Line(lineGeo, lineMat);
+          group.add(fieldLine);
+        }
+
+        // RF Pulse rings (expanding from center)
+        for (let i = 1; i <= 3; i++) {
+          const pulseGeo = new THREE.TorusGeometry(0.3 * i, 0.02, 8, 32);
+          const pulseMat = new THREE.MeshBasicMaterial({ 
+            color: 0xf59e0b, 
+            transparent: true, 
+            opacity: 0.5 - i * 0.12 
+          });
+          const pulse = new THREE.Mesh(pulseGeo, pulseMat);
+          pulse.rotation.y = Math.PI / 2;
+          pulse.userData.pulse = true;
+          group.add(pulse);
+        }
+      }
+
     } else if (selectedMachine === 'ct') {
       // CT Gantry - outer ring
       const gantryGeo = new THREE.TorusGeometry(2.2, 0.5, 16, 100);
@@ -429,7 +460,30 @@ export default function App() {
       patient.position.y = -0.5;
       group.add(patient);
 
-    } else if (selectedMachine === 'xray') {
+      // CT X-ray beam rays (individual lines from tube to detector)
+      if (isAnimating) {
+        const rayCount = 12;
+        for (let i = 0; i < rayCount; i++) {
+          const angle = (i / rayCount) * 0.8 - 0.4; // Spread angle
+          const rayPoints = [
+            new THREE.Vector3(0, 1.7, 0),
+            new THREE.Vector3(Math.sin(angle) * 0.8, -1.7, Math.cos(angle) * 0.3)
+          ];
+          const rayGeo = new THREE.BufferGeometry().setFromPoints(rayPoints);
+          const rayMat = new THREE.LineBasicMaterial({ 
+            color: 0xef4444, 
+            transparent: true, 
+            opacity: 0.6 
+          });
+          const ray = new THREE.Line(rayGeo, rayMat);
+          ray.userData.rotate = true;
+          rotatingGroup.add(ray);
+        }
+      }
+
+      group.add(rotatingGroup);
+
+      // Patient table
       // X-ray tube housing - red box at top
       const tubeHouseGeo = new THREE.BoxGeometry(0.9, 0.7, 0.7);
       const tubeHouseMat = new THREE.MeshStandardMaterial({ 
@@ -501,6 +555,27 @@ export default function App() {
       const arm = new THREE.Mesh(armGeo, armMat);
       arm.position.set(1, 0.8, 0);
       group.add(arm);
+
+      // X-ray beam rays (individual lines from tube to detector)
+      if (isAnimating) {
+        const rayCount = 15;
+        for (let i = 0; i < rayCount; i++) {
+          const offsetX = (i - 7) * 0.15;
+          const offsetZ = (Math.random() - 0.5) * 0.8;
+          const rayPoints = [
+            new THREE.Vector3(0, 1.65, 0),
+            new THREE.Vector3(offsetX, -1.9, offsetZ)
+          ];
+          const rayGeo = new THREE.BufferGeometry().setFromPoints(rayPoints);
+          const rayMat = new THREE.LineBasicMaterial({ 
+            color: 0xef4444, 
+            transparent: true, 
+            opacity: 0.5 
+          });
+          const ray = new THREE.Line(rayGeo, rayMat);
+          group.add(ray);
+        }
+      }
 
     } else if (selectedMachine === 'ultrasound') {
       // Machine cart body
@@ -607,19 +682,33 @@ export default function App() {
       gel.scale.set(1, 0.4, 1);
       group.add(gel);
 
-      // Sound waves emanating (visual)
+      // Sound waves emanating from transducer
       if (isAnimating) {
-        for (let i = 1; i <= 3; i++) {
-          const waveGeo = new THREE.TorusGeometry(0.15 * i, 0.02, 8, 32);
-          const waveMat = new THREE.MeshStandardMaterial({ 
+        for (let i = 1; i <= 4; i++) {
+          const waveGeo = new THREE.TorusGeometry(0.18 * i, 0.025, 8, 32);
+          const waveMat = new THREE.MeshBasicMaterial({ 
             color: 0x8b5cf6, 
+            transparent: true, 
+            opacity: 0.6 - i * 0.12 
+          });
+          const wave = new THREE.Mesh(waveGeo, waveMat);
+          wave.position.set(1.4, -0.6 - i * 0.18, 0.15);
+          wave.rotation.x = Math.PI / 2.5;
+          group.add(wave);
+        }
+
+        // Reflection waves coming back
+        for (let i = 1; i <= 2; i++) {
+          const reflectGeo = new THREE.TorusGeometry(0.12 * i, 0.02, 8, 32);
+          const reflectMat = new THREE.MeshBasicMaterial({ 
+            color: 0x22d3ee, 
             transparent: true, 
             opacity: 0.4 - i * 0.1 
           });
-          const wave = new THREE.Mesh(waveGeo, waveMat);
-          wave.position.set(1.4, -0.7 - i * 0.15, 0.15);
-          wave.rotation.x = Math.PI / 2;
-          group.add(wave);
+          const reflect = new THREE.Mesh(reflectGeo, reflectMat);
+          reflect.position.set(1.4, -0.9 + i * 0.15, 0.15);
+          reflect.rotation.x = Math.PI / 2.5;
+          group.add(reflect);
         }
       }
 
@@ -711,18 +800,57 @@ export default function App() {
       tracer2.userData.pulse = true;
       group.add(tracer2);
 
-      // Gamma ray lines (when active)
-      if (activeComponent === 3 || isAnimating) {
-        const rayMat = new THREE.LineBasicMaterial({ color: 0xfbbf24, transparent: true, opacity: 0.6 });
-        const rayPoints1 = [new THREE.Vector3(0.2, 0, 0), new THREE.Vector3(1.8, 0, 0)];
-        const rayGeo1 = new THREE.BufferGeometry().setFromPoints(rayPoints1);
-        const ray1 = new THREE.Line(rayGeo1, rayMat);
-        group.add(ray1);
+      // Gamma ray lines (always visible, more prominent when animating)
+      const rayOpacity = isAnimating ? 0.8 : 0.4;
+      
+      // Primary gamma ray pair (180° apart)
+      const rayMat1 = new THREE.LineBasicMaterial({ color: 0xfbbf24, transparent: true, opacity: rayOpacity, linewidth: 2 });
+      const rayPoints1 = [new THREE.Vector3(0.2, 0, 0), new THREE.Vector3(1.9, 0, 0)];
+      const rayGeo1 = new THREE.BufferGeometry().setFromPoints(rayPoints1);
+      const ray1 = new THREE.Line(rayGeo1, rayMat1);
+      group.add(ray1);
+      
+      const rayPoints2 = [new THREE.Vector3(0.2, 0, 0), new THREE.Vector3(-1.9, 0, 0)];
+      const rayGeo2 = new THREE.BufferGeometry().setFromPoints(rayPoints2);
+      const ray2 = new THREE.Line(rayGeo2, rayMat1);
+      group.add(ray2);
+
+      // Secondary gamma rays from second tracer
+      const rayMat2 = new THREE.LineBasicMaterial({ color: 0xf97316, transparent: true, opacity: rayOpacity * 0.7 });
+      const rayPoints3 = [new THREE.Vector3(-0.3, -0.15, 0.1), new THREE.Vector3(-0.3, 1.9, 0.1)];
+      const rayGeo3 = new THREE.BufferGeometry().setFromPoints(rayPoints3);
+      const ray3 = new THREE.Line(rayGeo3, rayMat2);
+      group.add(ray3);
+      
+      const rayPoints4 = [new THREE.Vector3(-0.3, -0.15, 0.1), new THREE.Vector3(-0.3, -1.9, 0.1)];
+      const rayGeo4 = new THREE.BufferGeometry().setFromPoints(rayPoints4);
+      const ray4 = new THREE.Line(rayGeo4, rayMat2);
+      group.add(ray4);
+
+      // Gamma ray hit indicators on detector ring
+      if (isAnimating) {
+        const hitGeo = new THREE.SphereGeometry(0.1, 8, 8);
+        const hitMat = new THREE.MeshBasicMaterial({ color: 0xfef08a, transparent: true, opacity: 0.8 });
         
-        const rayPoints2 = [new THREE.Vector3(0.2, 0, 0), new THREE.Vector3(-1.8, 0, 0)];
-        const rayGeo2 = new THREE.BufferGeometry().setFromPoints(rayPoints2);
-        const ray2 = new THREE.Line(rayGeo2, rayMat);
-        group.add(ray2);
+        const hit1 = new THREE.Mesh(hitGeo, hitMat);
+        hit1.position.set(1.85, 0, 0);
+        hit1.userData.pulse = true;
+        group.add(hit1);
+        
+        const hit2 = new THREE.Mesh(hitGeo, hitMat);
+        hit2.position.set(-1.85, 0, 0);
+        hit2.userData.pulse = true;
+        group.add(hit2);
+
+        const hit3 = new THREE.Mesh(hitGeo, hitMat);
+        hit3.position.set(-0.3, 1.85, 0.1);
+        hit3.userData.pulse = true;
+        group.add(hit3);
+
+        const hit4 = new THREE.Mesh(hitGeo, hitMat);
+        hit4.position.set(-0.3, -1.85, 0.1);
+        hit4.userData.pulse = true;
+        group.add(hit4);
       }
 
       // Patient table
